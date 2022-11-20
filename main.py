@@ -17,8 +17,14 @@ def batch_wassestein(train_data, train_data2, test_data, metric, batch_size, d, 
 
     # Train image K-means
     fname = f"{out_dir}/centroids-{batch_size}.npy"
-    print("\t- fitting data...", end='')
+    print("\t- fitting images...", end='')
     centroids = get_centroids(train_data, n_centroids=batch_size, fname=fname)
+    print("done")
+
+    # Train patch K-means
+    assert s == p, "Otherwise Grid artefacts in reconstructions have to be dealt with"
+    print("\t- fitting patches...", end='')
+    patch_centroids = get_patch_centroids(train_data, 256, d, c, p, s, out_dir)
     print("done")
 
     loss_dict = defaultdict(list)
@@ -27,7 +33,8 @@ def batch_wassestein(train_data, train_data2, test_data, metric, batch_size, d, 
         print(f"\t- rep: {i}:", end='')
         test_batch = test_data[np.random.choice(len(test_data), size=batch_size, replace=False)]
         real_batch = train_data2[np.random.choice(len(train_data2), size=batch_size, replace=False)]
-        batches = {f"real-batch": real_batch, f"mean": mean_train_image_batch, "centroids": centroids}
+        reconstructed_batch = reconstructed_with_patch_centroids(real_batch, patch_centroids, d, c, p, s).reshape(batch_size, -1)
+        batches = {f"real": real_batch, f"mean": mean_train_image_batch, "centroids": centroids, 'reconstructed': reconstructed_batch}
         for name, batch in batches.items():
             print(f"{name}, ", end='')
             loss_dict[f'{metric.name}-{name}'].append(metric(batch, test_batch))
@@ -48,40 +55,12 @@ def batch_wassestein(train_data, train_data2, test_data, metric, batch_size, d, 
 
     return loss_dict
 
-
-def test_patch_reconstructions(train_data, train_data2, test_data, metric, batch_size, d, c, p, s, n_exp, out_dir, sample_patches=True):
-    patch_centroids = get_patch_centroids(train_data, batch_size, d, c, p, s, out_dir)
-    reconstructed_data = reconstructed_with_patch_centroids(train_data2, patch_centroids, d, c, p, s)
-    dump_images(reconstructed_data[:batch_size], batch_size, d, c, f"{out_dir}/reconstructions-{batch_size}.png")
-
-    loss_dict = defaultdict(list)
-
-    for i in range(n_exp):
-        test_batch = test_data[np.random.choice(len(test_data), size=batch_size, replace=False)]
-        reconstructed_batch = reconstructed_data[np.random.choice(len(reconstructed_data), size=batch_size, replace=False)]
-
-        test_patches = to_patches(test_batch, d, c, p, s)
-        reconstructed_patches = to_patches(reconstructed_batch, d, c, p, s)
-
-        if sample_patches:
-            assert (len(test_patches) == len(reconstructed_patches) == len(patch_centroids))
-            patch_indices = np.random.choice(len(test_patches), size=batch_size, replace=False)
-            test_patches = test_patches[patch_indices]
-            reconstructed_patches = reconstructed_patches[patch_indices]
-            centroid_sample = patch_centroids[patch_indices]
-
-        loss_dict[f'patch_{metric.name}-{p}-{s}-patch-centroids'].append(metric(test_patches, centroid_sample))
-        loss_dict[f'patch_{metric.name}-{p}-{s}-reconstrucitons'].append(metric(test_patches, reconstructed_patches))
-
-    return loss_dict
-
-
 def main():
     data_path = '/mnt/storage_ssd/datasets/FFHQ_128'
-    d = 128
+    d = 64
     p, s = 8, 8
     gray = True
-    normalize_data = True
+    normalize_data = False
     c = 1 if gray else 3
     metric = emd()
 
@@ -101,8 +80,7 @@ def main():
     res_dict_full = dict()
     res_dict = dict()
     for batch_size in [2**i for i in range(4, 11)]:
-        res = batch_wassestein(train_data, train_data2, test_batch, metric, batch_size, d, c, p, s, n_exp=5, out_dir=out_dir)
-        res.update(test_patch_reconstructions(train_data, train_data2, test_batch, metric, batch_size, d, c, p, s, n_exp=3, out_dir=out_dir))
+        res = batch_wassestein(train_data, train_data2, test_batch, metric, batch_size, d, c, p, s, n_exp=3, out_dir=out_dir)
         res_dict_full[batch_size] = res
 
         plot(res_dict_full, f"{out_dir}/plot-std.png")

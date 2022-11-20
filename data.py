@@ -23,7 +23,9 @@ def get_data(data_path, resize=None, limit_data=10000, gray=False, normalize_dat
 
     data = data.reshape(len(data), -1)
     if normalize_data:
-        data = (data - data.mean(0)) / data.std(0)
+        # data = (data - data.mean(0)) / data.std(0)
+        data = data - np.mean(data, axis=1, keepdims=True)
+        data /= np.std(data, axis=1, keepdims=True)
 
     return data
 
