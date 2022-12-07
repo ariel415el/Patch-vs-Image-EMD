@@ -57,10 +57,10 @@ def batch_wassestein(train_data, train_data2, test_data, metric, batch_size, d, 
 
 def main():
     data_path = '/mnt/storage_ssd/datasets/FFHQ_128'
-    d = 64
-    p, s = 8, 8
+    d = 128
+    p, s = 5, 1
     gray = True
-    normalize_data = False
+    normalize_data = True
     c = 1 if gray else 3
     metric = emd()
 
