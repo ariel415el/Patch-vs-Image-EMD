@@ -56,7 +56,6 @@ class mmd_linear:
         delta = x.mean(0) - y.mean(0)
         return delta.dot(delta.T)
 
-
 class mmd_rbf:
     def __init__(self, gamma=1.0):
         self.name = f'mmd_rbf-{gamma}'
