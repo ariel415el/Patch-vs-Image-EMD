@@ -27,9 +27,11 @@ class swd:
 
 
 class emd:
-    name = 'emd'
+    def __init__(self, n_patches=None):
+        self.n_patches = n_patches
+        self.name = f'emd_n-{n_patches}'
 
-    def __call__(self, x, y):
+    def emd(self, x, y):
         uniform_x = np.ones(len(x)) / len(x)
         uniform_y = np.ones(len(y)) / len(y)
         M = ot.dist(x, y) / x.shape[1]
@@ -37,33 +39,15 @@ class emd:
         # M = compute_distances_batch(x, y, b=1024)
         return ot.emd2(uniform_x, uniform_y, M)
 
-
-class sinkhorn:
-    def __init__(self, reg=100):
-        self.name = f'sinkhorn-{reg}'
-        self.reg = reg
-
     def __call__(self, x, y):
-        uniform_x = np.ones(len(x)) / len(x)
-        uniform_y = np.ones(len(y)) / len(y)
-        M = ot.dist(x, y) / x.shape[1]
-        return ot.sinkhorn2(uniform_x, uniform_y, M, reg=self.reg)
+        if self.n_patches is not None:
+            patch_indices_x = np.random.choice(len(x), size=self.n_patches, replace=False)
+            patch_indices_y = np.random.choice(len(y), size=self.n_patches, replace=False)
+            return self.emd(x[patch_indices_x], y[patch_indices_y])
+        else:
+            return self.emd(x, y)
 
-class mmd_linear:
-    name = 'mmd_linear'
 
-    def __call__(self, x, y):
-        delta = x.mean(0) - y.mean(0)
-        return delta.dot(delta.T)
 
-class mmd_rbf:
-    def __init__(self, gamma=1.0):
-        self.name = f'mmd_rbf-{gamma}'
-        self.gamma = gamma
 
-    def __call__(self, X, Y):
-        from sklearn import metrics
-        XX = metrics.pairwise.rbf_kernel(X, X, self.gamma)
-        YY = metrics.pairwise.rbf_kernel(Y, Y, self.gamma)
-        XY = metrics.pairwise.rbf_kernel(X, Y, self.gamma)
-        return XX.mean() + YY.mean() - 2 * XY.mean()
+

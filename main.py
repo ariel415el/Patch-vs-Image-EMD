@@ -8,8 +8,31 @@ from data import get_data
 from utils.k_means import get_patch_centroids
 from metrics import emd
 from utils.k_means import get_centroids
-from utils.image import dump_images, to_patches, reconstructed_with_patch_centroids, plot
+from utils.image import dump_images, to_patches, plot, patches_to_image
 
+def get_nns(queries, refs):
+    X = refs
+    Y = queries
+    dist = (X * X).sum(1)[:, None] + (Y * Y).sum(1)[None, :] - 2.0 * X @ Y.T
+    d = X.shape[1]
+    dist /= d
+
+    NNs = np.argmin(dist, axis=0)  # find_NNs
+    return X[NNs]
+
+def reconstructed_with_patch_centroids(batch1, patch_centroids, d, c, p, s):
+    reconstructions = []
+    for i in range(len(batch1)):
+        img = batch1[i]
+        img_patches = to_patches(img[None,], d, c, p, s)
+        new_patches = get_nns(img_patches, patch_centroids)
+
+        new_patches = new_patches - new_patches.mean(1)[:, None] + img_patches.mean(1)[:, None]
+        new_img = patches_to_image(new_patches, d, c, p, s)
+        reconstructions.append(new_img)
+
+    reconstructions = np.stack(reconstructions)
+    return reconstructions
 
 def batch_wassestein(train_data, train_data2, test_data, metric, batch_size, d, c, p, s, n_exp, out_dir, sample_patches=True):
     print("Batch-wassestein")
@@ -56,7 +79,7 @@ def batch_wassestein(train_data, train_data2, test_data, metric, batch_size, d, 
     return loss_dict
 
 def main():
-    data_path = '/cs/labs/yweiss/ariel1/data/FFHQ_128'
+    data_path = '/mnt/storage_ssd/datasets/FFHQ_128/FFHQ_128/'
     d = 128
     p, s = 8, 8
     gray = False
