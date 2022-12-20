@@ -4,7 +4,7 @@ from collections import defaultdict
 import numpy as np
 import pandas as pd
 
-from data import get_data
+from utils.data import get_data
 from utils.k_means import get_patch_centroids
 from metrics import emd
 from utils.k_means import get_centroids
@@ -20,6 +20,7 @@ def get_nns(queries, refs):
     NNs = np.argmin(dist, axis=0)  # find_NNs
     return X[NNs]
 
+
 def reconstructed_with_patch_centroids(batch1, patch_centroids, d, c, p, s):
     reconstructions = []
     for i in range(len(batch1)):
@@ -33,6 +34,7 @@ def reconstructed_with_patch_centroids(batch1, patch_centroids, d, c, p, s):
 
     reconstructions = np.stack(reconstructions)
     return reconstructions
+
 
 def batch_wassestein(train_data, train_data2, test_data, metric, batch_size, d, c, p, s, n_exp, out_dir, sample_patches=True):
     print("Batch-wassestein")
@@ -78,23 +80,24 @@ def batch_wassestein(train_data, train_data2, test_data, metric, batch_size, d, 
 
     return loss_dict
 
+
 def main():
-    data_path = '/mnt/storage_ssd/datasets/FFHQ_128/FFHQ_128/'
+    data_path = '/cs/labs/yweiss/ariel1/data/FFHQ_128'
     d = 128
     p, s = 8, 8
     gray = False
-    normalize_data = True
+    normalize_data = False
     c = 1 if gray else 3
-    metric = emd()
+    metric = emd(n_samples=512)
     max_batch_size = 1024
 
     out_dir = f"batch_wassestein_{d}x{d}{'_Gray' if gray else ''}{'_Normalized' if normalize_data else ''}_M-{metric.name}"
     os.makedirs(out_dir, exist_ok=True)
 
-    print("Loading data...", end='')
-    data = get_data(data_path, resize=d, limit_data=10*max_batch_size, gray=gray, normalize_data=normalize_data)
+    data = get_data(data_path, im_size=d, limit_data=10*max_batch_size, gray=gray, normalize_data=normalize_data)
+    data = data.cpu().numpy()
     data = data[np.random.permutation(len(data))]
-    print("done")
+
     train_data = data[4*max_batch_size:5*max_batch_size]
     train_data2 = data[2*max_batch_size:4*max_batch_size]
     test_batch = data[:2*max_batch_size]
@@ -102,7 +105,7 @@ def main():
     res_dict_full = dict()
 
     res_dict = dict()
-    for batch_size in [2**i for i in range(2, 12)]:
+    for batch_size in [2**i for i in range(2, 8)]:
         res = batch_wassestein(train_data, train_data2, test_batch, metric, batch_size, d, c, p, s, n_exp=3, out_dir=out_dir)
         res_dict_full[batch_size] = res
 

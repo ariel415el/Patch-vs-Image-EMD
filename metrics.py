@@ -27,9 +27,9 @@ class swd:
 
 
 class emd:
-    def __init__(self, n_patches=None):
-        self.n_patches = n_patches
-        self.name = f'emd_n-{n_patches}'
+    def __init__(self, n_samples=None):
+        self.n_samples = n_samples
+        self.name = f'emd_n-{n_samples}'
 
     def emd(self, x, y):
         uniform_x = np.ones(len(x)) / len(x)
@@ -40,10 +40,10 @@ class emd:
         return ot.emd2(uniform_x, uniform_y, M)
 
     def __call__(self, x, y):
-        if self.n_patches is not None:
-            patch_indices_x = np.random.choice(len(x), size=self.n_patches, replace=False)
-            patch_indices_y = np.random.choice(len(y), size=self.n_patches, replace=False)
-            return self.emd(x[patch_indices_x], y[patch_indices_y])
+        if self.n_samples is not None:
+            samples_x = np.random.choice(len(x), size=min(len(x), self.n_samples), replace=False)
+            samples_y = np.random.choice(len(y), size=min(len(y), self.n_samples), replace=False)
+            return self.emd(x[samples_x], y[samples_y])
         else:
             return self.emd(x, y)
 

@@ -5,8 +5,12 @@ from torchvision.utils import save_image
 import torch
 from torch.nn import functional as F
 
+
 def dump_images(imgs, b, d, c, fname):
-    save_image(torch.from_numpy(imgs).reshape(b, d, d, c).permute(0,3,1,2), fname, normalize=True, nrow=int(np.sqrt(b)))
+    if type(imgs) == np.ndarray:
+        imgs = torch.from_numpy(imgs)
+    save_image(imgs.reshape(b, c, d, d), fname, normalize=True, nrow=int(np.sqrt(b)))
+
 
 def compute_n_patches_in_image(d, c, p, s):
     dummy_img = torch.zeros((1, c, d, d))
@@ -16,14 +20,15 @@ def compute_n_patches_in_image(d, c, p, s):
 
 
 def to_patches(x, d, c, p=8, s=4):
-    xp = x.reshape(-1, d, d, c).permute(0, 3, 1, 2)  # shape  (b,c,d,d)
-    if type(x) == np.ndarray:
+    xp = x.reshape(-1, c, d, d)  # shape  (b,c,d,d)
+    is_np = type(x) == np.ndarray
+    if is_np:
         xp = torch.from_numpy(xp)
     patches = F.unfold(xp, kernel_size=p, stride=s)  # shape (b, c*p*p, N_patches)
     patches = patches.permute(0, 2, 1)               # shape (b, N_patches, c*p*p)
     patches = patches.reshape(-1, patches.shape[-1]) # shape (b, N_patches * c*p*p)
 
-    if type(x) == np.ndarray:
+    if is_np:
         patches = patches.numpy()
     return patches
 
@@ -31,15 +36,23 @@ def to_patches(x, d, c, p=8, s=4):
 def patches_to_image(patches, d, c, p=8, s=4):
     patches_per_image = compute_n_patches_in_image(d, c, p, s)
 
-    was_ndarray = type(patches) == np.ndarray
+    is_ndarray = type(patches) == np.ndarray
 
-    if was_ndarray:
+    if is_ndarray:
         patches = torch.from_numpy(patches)
     patches = patches.reshape(-1, patches_per_image, c * p ** 2)
     patches = patches.permute(0, 2, 1)
     img = F.fold(patches, (d, d), kernel_size=p, stride=s)
-    if was_ndarray:
-        img = img.permute(0, 2, 3, 1).numpy()
+
+    # normal fold matrix
+    input_ones = torch.ones((1, c, d, d), dtype=patches.dtype, device=patches.device)
+    divisor = F.unfold(input_ones, kernel_size=p, dilation=(1, 1), stride=s, padding=(0, 0))
+    divisor = F.fold(divisor, output_size=(d, d), kernel_size=p, stride=s)
+
+    divisor[divisor == 0] = 1.0
+    return (img / divisor).squeeze(dim=0).unsqueeze(0)
+
+
     return img
 
 def plot(res_dict, fname, std=True):

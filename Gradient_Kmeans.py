@@ -1,22 +1,20 @@
 import os
 from math import sqrt
-import numpy as np
 import torch
 from PIL import Image
 
 import wandb
 from torchvision.utils import save_image, make_grid
 
-from data import get_data
+from utils.data import get_data
 from metrics import emd
-import torch.nn.functional as F
 
 from utils.image import compute_n_patches_in_image, patches_to_image, to_patches
 from utils.nns import get_NN_indices_low_memory
 
 
 def get_log_image(tensor):
-    grid = make_grid(tensor.reshape(-1, d, d, c).permute(0, 3, 1, 2), normalize=True)
+    grid = make_grid(tensor.reshape(-1, c, d, d), normalize=True)
     # Add 0.5 after unnormalizing to [0, 255] to round to nearest integer
     ndarr = grid.mul(255).add_(0.5).clamp_(0, 255).permute(1, 2, 0).to("cpu", torch.uint8).numpy()
     return Image.fromarray(ndarr)
@@ -33,7 +31,7 @@ def init_patch_kmeans(data, data_patches, n_images, init_mode):
         n = compute_n_patches_in_image(d, c, p, s) * n_images
         rand_assignmets = torch.randint(n, size=(len(data_patches),))
         patches = torch.stack([data_patches[rand_assignmets == j].mean(0) for j in torch.unique(rand_assignmets)])
-        clusters_images = patches_to_image(patches, d, c, p, s).permute(0,2,3,1)
+        clusters_images = patches_to_image(patches, d, c, p, s)
     return clusters_images
 
 
@@ -41,9 +39,9 @@ def train_gradient_kmeans(data, n_images):
     data_patches = to_patches(data, d, c, p, s)
     clusters_images = init_patch_kmeans(data, data_patches, n_images, init_mode).to(device)
     x = clusters_images.requires_grad_()
-    opt = torch.optim.Adam([x], lr=0.001)
+    opt = torch.optim.Adam([x], lr=lr)
     for i in range(n_steps):
-        save_image(x.reshape(-1, d, d, c).permute(0, 3, 1, 2), f"{out_dir}/clusters-{i}.png", normalize=True, nrow=int(sqrt(n_images)))
+        save_image(x.reshape(-1, c, d, d), f"{out_dir}/clusters-{i}.png", normalize=True, nrow=int(sqrt(n_images)))
 
         x_patches = to_patches(x, d, c, p, s)
         with torch.no_grad():
@@ -60,7 +58,7 @@ def train_gradient_kmeans(data, n_images):
 
         # wandb.log({"examples": wandb.Image(get_log_image(x), caption="Top: Output, Bottom: Input")})
         wandb.log({"Loss": loss.item(),
-                   "EMD-256-patches":emd(n_patches=256)(x_patches.detach().cpu().numpy(), data_patches.detach().cpu().numpy())})
+                   "EMD-256-patches":emd(n_samples=256)(x_patches.detach().cpu().numpy(), data_patches.detach().cpu().numpy())})
 
         print(f"iter-{i}: Loss {loss.item()}")
 
@@ -69,17 +67,18 @@ if __name__ == '__main__':
 
     device = torch.device("cpu")
     # device = torch.device("cpu")
-    data_path = '/mnt/storage_ssd/datasets/FFHQ_128/FFHQ_128'
+    data_path = '/cs/labs/yweiss/ariel1/data/FFHQ_128'
     d = 64
     p, s = 8, 4
-    init_mode = "mean"
+    init_mode = "rand"
     gray = False
     normalize_data = False
     c = 1 if gray else 3
     limit_data = 1024
     n_images = 16
     nn_batch_size = 128
-    n_steps = 1000
+    n_steps = 100
+    lr = 0.1
 
     out_dir = f"Kmeans_I-{init_mode}_D-{d}_P-{p}_S-{s}"
     os.makedirs(out_dir, exist_ok=True)
@@ -87,7 +86,6 @@ if __name__ == '__main__':
     wandb.init(project="Patch-EMD-experiments", name=out_dir)
 
     print("Loading data...", end='')
-    data = get_data(data_path, resize=d, limit_data=limit_data, gray=gray, normalize_data=normalize_data)
-    data = torch.from_numpy(data).to(device)
+    data = get_data(data_path, im_size=d, limit_data=limit_data, gray=gray, normalize_data=normalize_data).to(device)
 
     train_gradient_kmeans(data, n_images)
