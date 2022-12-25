@@ -26,7 +26,7 @@ def to_patches(x, d, c, p=8, s=4):
         xp = torch.from_numpy(xp)
     patches = F.unfold(xp, kernel_size=p, stride=s)  # shape (b, c*p*p, N_patches)
     patches = patches.permute(0, 2, 1)               # shape (b, N_patches, c*p*p)
-    patches = patches.reshape(-1, patches.shape[-1]) # shape (b, N_patches * c*p*p)
+    patches = patches.reshape(-1, patches.shape[-1]) # shape (b * N_patches, c*p*p))
 
     if is_np:
         patches = patches.numpy()
@@ -50,10 +50,8 @@ def patches_to_image(patches, d, c, p=8, s=4):
     divisor = F.fold(divisor, output_size=(d, d), kernel_size=p, stride=s)
 
     divisor[divisor == 0] = 1.0
-    return (img / divisor).squeeze(dim=0).unsqueeze(0)
+    return (img / divisor)
 
-
-    return img
 
 def plot(res_dict, fname, std=True):
     from matplotlib import pyplot as plt
