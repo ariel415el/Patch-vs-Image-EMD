@@ -10,7 +10,10 @@ def get_data(data_path, im_size=None, limit_data=10000, gray=False, normalize_da
     print("Loading data...", end='')
 
     """Read 'n_images' random images"""
-    image_paths = sorted([os.path.join(data_path, x) for x in os.listdir(data_path)])[:limit_data]
+    if os.path.isdir(data_path):
+        image_paths = sorted([os.path.join(data_path, x) for x in os.listdir(data_path)])[:limit_data]
+    else:
+        image_paths = [data_path]
 
     transforms = [T.ToTensor(), T.Normalize((0.5,), (0.5,))]
     if im_size is not None:

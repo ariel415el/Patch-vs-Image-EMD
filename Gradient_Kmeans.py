@@ -32,8 +32,9 @@ def init_patch_kmeans(data, data_patches, n_images, init_mode, p, s):
         clusters_images = torch.randn((n_images, *data.shape[1:]))
     elif init_mode == "rand_assignment":
         n = compute_n_patches_in_image(d, c, p, s) * n_images
-        rand_assignmets = torch.randint(n, size=(len(data_patches),))
-        patches = torch.stack([data_patches[rand_assignmets == j].mean(0) for j in torch.unique(rand_assignmets)])
+        rand_assignmets = torch.cat([torch.randint(n, size=(len(data_patches) - n,)), torch.arange(n)]) # Ensure each patch is initiated
+        rand_assignmets = rand_assignmets[torch.randperm(len(rand_assignmets))]
+        patches = torch.stack([data_patches[rand_assignmets == j].mean(0) for j in range(n)])
         clusters_images = patches_to_image(patches, d, c, p, s)
     return clusters_images
 
@@ -79,18 +80,19 @@ def train_gradient_kmeans(data, n_images, init_mode, p, s, lr=0.01, n_steps=300)
     return to_patches(x.detach(), d, c, p, s)
 
 
-def load_data(data_path, limit_data, gray, normalize_data):
+def load_dataset(data_path, limit_data, gray, normalize_data):
     print("Loading data...", end='')
-    # data = get_data(data_path, im_size=1024, limit_data=limit_data, gray=gray, normalize_data=normalize_data).to(device)
+    data = get_data(data_path, im_size=d, limit_data=limit_data, gray=gray, normalize_data=normalize_data).to(device)
+    print(f"{len(data)} samples loaded", )
+    return data
 
-    data = get_data(data_path, im_size=None, limit_data=limit_data, gray=gray, normalize_data=normalize_data,
-                    flatten=False).to(device)
-    data = torch.nn.functional.unfold(data, kernel_size=d, stride=d // 2)  # shape (b, c*p*p, N_patches)
+
+def create_dataset_from_image(data_path, limit_data, gray, normalize_data):
+    data = get_data(data_path, im_size=None, limit_data=limit_data, gray=gray, normalize_data=normalize_data, flatten=False).to(device)
+    data = torch.nn.functional.unfold(data, kernel_size=d, stride=d//2)  # shape (b, c*p*p, N_patches)
     data = data.permute(0, 2, 1)  # shape (b, N_patches, c*p*p)
     data = data.reshape(-1, data.shape[-1])  # shape (b * N_patches, c*p*p)
     data = data[torch.randperm(len(data))[:limit_data]]
-
-    print(f"{len(data)} samples loaded", )
 
     return data
 
@@ -98,27 +100,22 @@ def load_data(data_path, limit_data, gray, normalize_data):
 if __name__ == '__main__':
     device = torch.device("cuda:0")
     # data_path = '/cs/labs/yweiss/ariel1/data/FFHQ_128'
-    data_path = '/home/ariel/Downloads/one_image_data/grass'
     d = 64
     log = False
     gray = False
     normalize_data = False
     c = 1 if gray else 3
-    limit_data = 256
-    p = 5
-    s = 3
-    n_images = 16
+    limit_data = 128
+    p = 7
+    s = 1
+    n_images = 8
     lr = 0.02
     n_steps = 300
 
     for data_path in [
-                      # '/home/ariel/Downloads/one_image_data/grass',
-                      '/home/ariel/Downloads/one_image_data/brick_wall',
-                      # '/home/ariel/Downloads/one_image_data/stone_wall',
-                      # '/home/ariel/Downloads/one_image_data/pebbles'
+                      'image_sample/12.jpg'
                       ]:
-        data = load_data(data_path, limit_data, gray, normalize_data)
-        save_image(data.reshape(-1, c, d, d), f"{os.path.basename(data_path)}.png", normalize=True, nrow=int(sqrt(len(data))))
+        data = create_dataset_from_image(data_path, limit_data, gray, normalize_data)
         for init_mode in [
                         # "data",
                         "rand_assignment"
@@ -148,3 +145,4 @@ if __name__ == '__main__':
                        nrow=int(sqrt(len(GKmeans_centroids))))
             save_image(kmeans_centroids, f"{out_dir}/kmeans_centroids.png", normalize=True,
                        nrow=int(sqrt(len(kmeans_centroids))))
+            save_image(data.reshape(-1, c, d, d), f"{out_dir}/data.png", normalize=True, nrow=int(sqrt(len(data))))
