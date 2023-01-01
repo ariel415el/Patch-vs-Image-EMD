@@ -80,15 +80,15 @@ def train_gradient_kmeans(data, n_images, init_mode, p, s, lr=0.01, n_steps=300)
     return to_patches(x.detach(), d, c, p, s)
 
 
-def load_dataset(data_path, limit_data, gray, normalize_data):
+def load_dataset(data_path, im_size, limit_data, gray, normalize_data):
     print("Loading data...", end='')
-    data = get_data(data_path, im_size=d, limit_data=limit_data, gray=gray, normalize_data=normalize_data).to(device)
+    data = get_data(data_path, im_size=im_size, limit_data=limit_data, gray=gray, normalize_data=normalize_data)
     print(f"{len(data)} samples loaded", )
     return data
 
 
 def create_dataset_from_image(data_path, limit_data, gray, normalize_data):
-    data = get_data(data_path, im_size=None, limit_data=limit_data, gray=gray, normalize_data=normalize_data, flatten=False).to(device)
+    data = get_data(data_path, im_size=None, limit_data=limit_data, gray=gray, normalize_data=normalize_data, flatten=False)
     data = torch.nn.functional.unfold(data, kernel_size=d, stride=d//2)  # shape (b, c*p*p, N_patches)
     data = data.permute(0, 2, 1)  # shape (b, N_patches, c*p*p)
     data = data.reshape(-1, data.shape[-1])  # shape (b * N_patches, c*p*p)
@@ -99,50 +99,47 @@ def create_dataset_from_image(data_path, limit_data, gray, normalize_data):
 
 if __name__ == '__main__':
     device = torch.device("cuda:0")
-    # data_path = '/cs/labs/yweiss/ariel1/data/FFHQ_128'
+    data_path = '/home/ariel/university/repos/DataEfficientGANs/square_data/all'
     d = 64
     log = False
     gray = False
     normalize_data = False
     c = 1 if gray else 3
-    limit_data = 128
+    limit_data = 64
     p = 7
     s = 1
-    n_images = 8
+    n_images = 1
     lr = 0.02
     n_steps = 300
 
-    for data_path in [
-                      'image_sample/12.jpg'
-                      ]:
-        data = create_dataset_from_image(data_path, limit_data, gray, normalize_data)
-        for init_mode in [
-                        # "data",
-                        "rand_assignment"
-            ]:
-            out_dir = f"run_I-{init_mode}_D-{d}_P-{p}_S-{s}_{os.path.basename(data_path)}"
-            os.makedirs(out_dir, exist_ok=True)
-            print(out_dir)
-            if log:
-                wandb.init(project="Patch-EMD-experiments", name=out_dir, reinit=True)
+    init_mode = "data"
 
-            GKmeans_centroids = train_gradient_kmeans(data, n_images, init_mode, p, s, lr, n_steps)
+    # data = create_dataset_from_image(data_path, limit_data, gray, normalize_data)
+    data = load_dataset(data_path, d, limit_data, gray, normalize_data).to(device)
 
-            Kmeans_centroids = torch.from_numpy(get_patch_centroids(data.cpu().numpy(), n_images, d, c, p, s, out_dir)).to(device)
+    out_dir = f"run_I-{init_mode}_D-{d}_P-{p}_S-{s}_{os.path.basename(data_path)}"
+    os.makedirs(out_dir, exist_ok=True)
+    print(out_dir)
+    if log:
+        wandb.init(project="Patch-EMD-experiments", name=out_dir, reinit=True)
 
-            # Evaluate
-            data_patches = to_patches(data, d, c, p, s=p)
-            GKmeans_centroids_loss = get_loss(data_patches, GKmeans_centroids).item()
-            Kmeans_centroids_loss = get_loss(data_patches, Kmeans_centroids).item()
-            print('GK-means final loss: ', GKmeans_centroids_loss)
-            print('K-means final loss: ', Kmeans_centroids_loss)
-            if log:
-                wandb.log({'GKmeans_centroids_loss': GKmeans_centroids_loss, "Kmeans_centroids_loss": Kmeans_centroids_loss})
+    GKmeans_centroids = train_gradient_kmeans(data, n_images, init_mode, p, s, lr, n_steps)
 
-            GKmeans_centroids = patches_to_image(GKmeans_centroids, d, c, p, s).reshape(-1, c, d, d)
-            kmeans_centroids = patches_to_image(Kmeans_centroids, d, c, p, s).reshape(-1, c, d, d)
-            save_image(GKmeans_centroids, f"{out_dir}/GKmeans_centroids.png", normalize=True,
-                       nrow=int(sqrt(len(GKmeans_centroids))))
-            save_image(kmeans_centroids, f"{out_dir}/kmeans_centroids.png", normalize=True,
-                       nrow=int(sqrt(len(kmeans_centroids))))
-            save_image(data.reshape(-1, c, d, d), f"{out_dir}/data.png", normalize=True, nrow=int(sqrt(len(data))))
+    Kmeans_centroids = torch.from_numpy(get_patch_centroids(data.cpu().numpy(), n_images, d, c, p, s, out_dir)).to(device)
+
+    # Evaluate
+    data_patches = to_patches(data, d, c, p, s=p)
+    GKmeans_centroids_loss = get_loss(data_patches, GKmeans_centroids).item()
+    Kmeans_centroids_loss = get_loss(data_patches, Kmeans_centroids).item()
+    print('GK-means final loss: ', GKmeans_centroids_loss)
+    print('K-means final loss: ', Kmeans_centroids_loss)
+    if log:
+        wandb.log({'GKmeans_centroids_loss': GKmeans_centroids_loss, "Kmeans_centroids_loss": Kmeans_centroids_loss})
+
+    GKmeans_centroids = patches_to_image(GKmeans_centroids, d, c, p, s).reshape(-1, c, d, d)
+    kmeans_centroids = patches_to_image(Kmeans_centroids, d, c, p, s).reshape(-1, c, d, d)
+    save_image(GKmeans_centroids, f"{out_dir}/GKmeans_centroids.png", normalize=True,
+               nrow=int(sqrt(len(GKmeans_centroids))))
+    save_image(kmeans_centroids, f"{out_dir}/kmeans_centroids.png", normalize=True,
+               nrow=int(sqrt(len(kmeans_centroids))))
+    save_image(data.reshape(-1, c, d, d), f"{out_dir}/data.png", normalize=True, nrow=int(sqrt(len(data))))
